@@ -20,6 +20,16 @@ module.exports = {
 		),
 	async execute(interaction) {
 		if (interaction.options.getSubcommand() === 'newuser') {
+			const userQuery = discordUser.findOne({ _user: interaction.user.id });
+			const user = await userQuery.exec();
+
+			if (user !== undefined) {
+				interaction.reply(
+					'User already exists. Creation of new user not necessary.'
+				);
+				return;
+			}
+
 			const modal = new ModalBuilder()
 				.setCustomId('newUserModal')
 				.setTitle('Register New User!');
@@ -42,27 +52,19 @@ module.exports = {
 				})
 				.catch((error) => {
 					console.error(error);
-					return null;
+					return;
 				});
 
 			if (submitted) {
 				const newUser = submitted.fields.getTextInputValue('newuserInput');
 
-				await discordUser.findOneAndUpdate(
-					{
-						_user: interaction.user.id,
-					},
-					{
-						_user: interaction.user.id,
-						name: newUser,
-						points: 1,
-						numNominated: 0,
-						rafflesWon: 0,
-					},
-					{
-						upsert: true,
-					}
-				);
+				await discordUser.create({
+					_user: interaction.user.id,
+					name: newUser,
+					points: 1,
+					numNominated: 0,
+					rafflesWon: 0,
+				});
 
 				await submitted.reply({
 					content:
@@ -70,49 +72,42 @@ module.exports = {
 				});
 			}
 		} else {
-			await interaction.reply('Thinking...');
+			await interaction.deferReply();
 
-			discordUser.find(
-				{ _user: interaction.user.id },
-				async (err, foundUser) => {
-					if (foundUser.length === 0) {
-						await interaction.editReply({
-							content:
-								'User not found, please submit the following command: "/register newuser"',
-						});
-					} else {
-						let bookTitle = '';
+			const userQuery = discordUser.findOne({ _user: interaction.user.id });
+			const user = await userQuery.exec();
 
-						currentlyReading.find({}, async (err, current) => {
-							if (current.length === 0) {
-								await interaction.editReply(
-									'A book has not yet been chosen, reach out to Tyler for assistance!'
-								);
-								return;
-							}
-							
-							bookTitle = current[0]._title;
+			if (user === undefined) {
+				await interaction.editReply({
+					content:
+						'User not found, please register a new user using "/register newuser"',
+				});
+				return;
+			} else {
+				const currentlyReadingQuery = currentlyReading.findOne({});
+				currentlyReadingQuery.select('_title');
 
-							currentlyReading.findOneAndUpdate(
-								{ _title: bookTitle },
-								{
-									$set: {
-										[`registeredReaders.${foundUser[0].name}`]: foundUser[0],
-									},
-								},
-								{ new: true },
-								async (err, res) => {
-									if (err) console.log(err);
+				const current = await currentlyReadingQuery.exec();
 
-									await interaction.editReply({
-										content: 'Successfully Registered!',
-									});
-								}
-							);
-						});
-					}
+				if (current === undefined) {
+					await interaction.editReply({
+						content:
+							'A book has not yet been chosen, reach out to Tyler for assistance!',
+					});
+					return;
 				}
-			);
+
+				await current.updateOne(
+					{ _title: current._title },
+					{
+						$set: {
+							[`registeredReaders.${user.name}`]: user,
+						},
+					}
+				);
+
+				await interaction.editReply('successfully Registered!');
+			}
 		}
 	},
 };

@@ -15,47 +15,58 @@ module.exports = {
 				.setRequired(true)
 		),
 	async execute(interaction) {
+		await interaction.deferReply();
+
 		const target =
 			interaction.options.getString('title') ?? 'No title provided';
 
 		if (target === 'No title provided') {
-			await interaction.reply({ content: `Failed: ${target}` });
+			await interaction.editReply({ content: `Lookup Failed: ${target}` });
 		} else {
-			await interaction.reply('Thinking...');
+			//build and execute db query to find book
+			const bookQuery = library.findOne({ _title: target });
+			bookQuery.select(
+				'userSubmitted isbn author _title genre dateChosen dateRead'
+			);
 
-			library.findOne({ _title: target }, async function (err, item) {
-				if (item === null) {
-					await interaction.editReply('Book not found');
-					return;
-				}
-				discordUser.findOne(
-					{ _user: item.userSubmitted },
-					async function (err2, user) {
-						if (err2) {
-							interaction.editReply('Book not found');
-							return;
-						}
+			const book = await bookQuery.exec();
 
-						const ISBN = item.isbn;
+			//build and execute db query to find user
+			const userQuery = discordUser.findOne({ _user: book.userSubmitted });
+			userQuery.select('name');
 
-						const bookEmbed = new EmbedBuilder()
-							.setColor(0x0099ff)
-							.setTitle(item._title)
-							.setURL('https://openlibrary.org/isbn/' + ISBN)
-							.setAuthor({ name: item.author })
-							.addFields(
-								{ name: 'Submitted By:', value: user.name },
-								{ name: 'Genre:', value: item.genre }
-							)
-							.setImage(
-								'https://covers.openlibrary.org/b/isbn/' + ISBN + '-M.jpg'
-							);
+			const user = await userQuery.exec();
 
-						await interaction.editReply({
-							embeds: [bookEmbed],
-						});
-					}
+			let read = 'Book has not been read yet.';
+			let chosen = 'Book has not been chosen yet.';
+
+			if (book.dateChosen !== undefined) {
+				chosen = book.dateChosen;
+			}
+
+			if (book.dateRead !== undefined) {
+				read = book.dateRead;
+			}
+
+			//construct embed
+			const bookEmbed = new EmbedBuilder()
+				.setColor(0x0099ff)
+				.setTitle(book._title)
+				.setURL('https://openlibrary.org/isbn/' + book.isbn)
+				.setAuthor({ name: book.author })
+				.addFields(
+					{ name: 'Submitted By:', value: user.name },
+					{ name: 'Genre:', value: book.genre },
+					{ name: 'Date Chosen:', value: chosen },
+					{ name: 'Date Finished:', value: read }
+				)
+				.setImage(
+					'https://covers.openlibrary.org/b/isbn/' + book.isbn + '-M.jpg'
 				);
+
+			//reply with embed
+			await interaction.editReply({
+				embeds: [bookEmbed],
 			});
 		}
 	},

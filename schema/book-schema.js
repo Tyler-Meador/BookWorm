@@ -25,6 +25,18 @@ const bookSchema = new Schema({
 		type: Number,
 		required: true,
 	},
+	averageRating: {
+		type: Number,
+		required: false,
+	},
+	dateChosen: {
+		type: String,
+		required: false,
+	},
+	dateRead: {
+		type: String,
+		required: false,
+	},
 });
 
 const nominated = model('nominated', bookSchema);

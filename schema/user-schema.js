@@ -25,6 +25,9 @@ const userSchema = new Schema({
 	bookCompleted: {
 		type: [String],
 	},
+	userRatings: {
+		type: [String],
+	},
 });
 
 const discordUser = model('users', userSchema);

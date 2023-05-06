@@ -32,163 +32,219 @@ module.exports = {
 			subcommand
 				.setName('completed')
 				.setDescription('See who has completed the current book!')
+		)
+		.addSubcommand((subcommand) =>
+			subcommand
+				.setName('leaderboard')
+				.setDescription('See the top rated books!')
 		),
 	async execute(interaction) {
+		await interaction.deferReply();
+
 		if (interaction.options.getSubcommand() === 'nominated') {
 			let bookArray = [];
 
-			await interaction.reply('Thinking...');
+			//build and grab list of all books nominated
+			const nominatedQuery = nominated.find({});
+			nominatedQuery.select('_title userSubmitted');
 
-			nominated.find({}, async (err, nominatedBooks) => {
-				if (nominatedBooks.length === 0) {
-					await interaction.editReply(
-						'There are 0 books nominated... Nominate a book using "/nominate" '
-					);
-					return;
+			const nominatedBooks = await nominatedQuery.exec();
+
+			//return if no books nominated
+			if (nominatedBooks.length === 0) {
+				await interaction.editReply(
+					'There are 0 books nominated... Nominate a book using "/nominate" '
+				);
+				return;
+			}
+
+			//cycle through all books, attach user who submitted and display string.
+			nominatedBooks.forEach(async (book) => {
+				const userQuery = discordUser.findOne({ _user: book.userSubmitted });
+				userQuery.select('name');
+
+				const user = await userQuery.exec();
+
+				let nominatedString = '';
+				if (user === undefined) {
+					nominatedString = book._title + ' - Submitted by: User Not Found';
+				} else {
+					nominatedString = book._title + ' - Submitted by: ' + user.name;
+					bookArray.push(nominatedString);
 				}
-				nominatedBooks.forEach((book) => {
-					discordUser.find(
-						{ _user: book.userSubmitted },
-						async (err, nominatedUser) => {
-							let combinedBookUser = '';
-							if (nominatedUser === 0) {
-								combinedBookUser =
-									book._title + ' - Submitted by: User Not Found';
-							}
-							combinedBookUser =
-								book._title + ' - Submitted by: ' + nominatedUser[0].name;
-							bookArray.push(combinedBookUser);
 
-							if (bookArray.length === nominatedBooks.length) {
-								await interaction.editReply({
-									content:
-										'The Following Books Are Nominated: \n' +
-										bookArray.join('\n'),
-								});
-							}
-						}
-					);
-				});
+				if (bookArray.length === nominatedBooks.length) {
+					await interaction.editReply({
+						content:
+							'The Following Books Are Nominated: \n	- ' +
+							bookArray.join('\n	- '),
+					});
+				}
 			});
 		} else if (interaction.options.getSubcommand() === 'library') {
 			let bookArray = [];
 
-			await interaction.reply('Thinking...');
+			//grab all library books
+			const libraryQuery = library.find({});
+			libraryQuery.select('_title averageRating');
 
-			library.find({}, async (err, libraryBooks) => {
-				if (libraryBooks.length === 0) {
-					await interaction.editReply(
-						'The library is currently empty! Please check back at a later date.'
-					);
-					return;
+			const libraryBooks = await libraryQuery.exec();
+
+			libraryBooks.forEach((book) => {
+				let rating = '';
+				if (book.averageRating === undefined) {
+					rating = 'No score recorded';
+				} else {
+					rating = 'Average Score: ' + book.averageRating + '/5';
 				}
-				libraryBooks.forEach((book) => {
-					bookArray.push(book._title);
-				});
-				await interaction.editReply({
-					content:
-						'The Library contains the following books: \n' +
-						bookArray.join('\n'),
-				});
+
+				bookArray.push(book._title + ' | ' + rating);
+			});
+
+			await interaction.editReply({
+				content:
+					'The Library contains the following books: \n	- ' +
+					bookArray.join('\n	- '),
 			});
 		} else if (interaction.options.getSubcommand() === 'current') {
-			let bookArray = [];
+			const currentQuery = currentlyReading.find({});
+			currentQuery.select('isbn _title author genre userSubmitted');
 
-			await interaction.reply('Thinking...');
+			const currentBook = await currentQuery.exec();
 
-			currentlyReading.find({}, async (err, current) => {
-				if (current.length === 0) {
-					await interaction.editReply(
-						'A book has not yet been chosen, reach out to Tyler for assistance!'
-					);
-					return;
-				}
+			const userQuery = discordUser.findOne({
+				_user: currentBook[0].userSubmitted,
+			});
+			userQuery.select('name');
 
-				const ISBN = current[0].isbn;
+			const user = await userQuery.exec();
 
+			if (currentBook.length === 0) {
+				await interaction.editReply(
+					'A book has not yet been chosen, reach out to Tyler for assistance!'
+				);
+				return;
+			} else {
 				const bookEmbed = new EmbedBuilder()
 					.setColor(0x0099ff)
-					.setTitle(current[0]._title)
-					.setURL('https://openlibrary.org/isbn/' + ISBN)
-					.setAuthor({ name: current[0].author })
-					.addFields({ name: 'Genre:', value: current[0].genre })
-					.setImage('https://covers.openlibrary.org/b/isbn/' + ISBN + '-M.jpg');
+					.setTitle(currentBook[0]._title)
+					.setURL('https://openlibrary.org/isbn/' + currentBook[0].isbn)
+					.setAuthor({ name: currentBook[0].author })
+					.addFields(
+						{ name: 'Submitted By:', value: user.name },
+						{ name: 'Genre:', value: currentBook[0].genre }
+					)
+					.setImage(
+						'https://covers.openlibrary.org/b/isbn/' +
+							currentBook[0].isbn +
+							'-M.jpg'
+					);
 
-				await interaction.editReply({ embeds: [bookEmbed] });
-			});
-		} else if (interaction.options.getSubcommand() === 'stats') {
-			discordUser.find({ _user: interaction.user.id }, async (err, user) => {
-				if (user.length === 0) {
-					await interaction.reply({
-						content:
-							'User does not exist, please register using command "/register newuser"',
-					});
-					return;
-				}
-				await interaction.reply({
-					content: `${user[0].name}\n-------\nPoints: ${
-						user[0].points
-					}\nBooks Nominated: ${user[0].numNominated}\nRaffles Won: ${
-						user[0].rafflesWon
-					}\nCompleted Books: ${user[0].bookCompleted.join(' | ')}`,
+				//reply with embed
+				await interaction.editReply({
+					embeds: [bookEmbed],
 				});
-			});
+			}
+		} else if (interaction.options.getSubcommand() === 'stats') {
+			const userQuery = discordUser.findOne({ _user: interaction.user.id });
+
+			const user = await userQuery.exec();
+
+			if (user === undefined) {
+				await interaction.editReply({
+					content:
+						'User does not exist, please register using command "/register newuser"',
+				});
+				return;
+			} else {
+				await interaction.editReply({
+					content: `${user.name}\n-------\nPoints: ${
+						user.points
+					}\nBooks Nominated: ${user.numNominated}\nRaffles Won: ${
+						user.rafflesWon
+					}\nCompleted Books: \n	- ${user.bookCompleted.join(
+						'\n	- '
+					)}\nPersonal Ratings: \n	- ${user.userRatings.join('\n	- ')}`,
+				});
+			}
 		} else if (interaction.options.getSubcommand() === 'registered') {
 			let readerArray = [];
 
-			await interaction.reply('Thinking...');
+			const currentReadingQuery = currentlyReading.findOne({});
+			currentReadingQuery.select('registeredReaders');
 
-			currentlyReading.find({}, async (err, current) => {
-				if (current.length === 0) {
-					await interaction.editReply(
-						'A book has not yet been chosen, reach out to Tyler for assistance!'
-					);
-					return;
-				}
+			const current = await currentReadingQuery.exec();
 
-				if (current[0].registeredReaders === undefined) {
-					await interaction.editReply(
-						'There are no registered readers yet! use "/register to register!"'
-					);
-					return;
-				}
+			if (current === undefined) {
+				await interaction.editReply(
+					'A book has not yet been chosen, reach out to Tyler for assistance!'
+				);
+				return;
+			} else if (current.registeredReaders === undefined) {
+				await interaction.editReply(
+					'There are no registered readers yet! use "/register to register!"'
+				);
+				return;
+			}
 
-				current[0].registeredReaders.forEach((reader) => {
-					readerArray.push(reader.name);
-				});
+			current.registeredReaders.forEach((reader) => {
+				readerArray.push(reader.name);
+			});
 
-				await interaction.editReply({
-					content:
-						'The following users are reading the current book: \n' +
-						readerArray.join('\n'),
-				});
+			await interaction.editReply({
+				content:
+					'The following users are reading the current book: \n	- ' +
+					readerArray.join('\n	- '),
 			});
 		} else if (interaction.options.getSubcommand() === 'completed') {
 			let readerArray = [];
-			await interaction.reply('Thinking...');
 
-			currentlyReading.find({}, async (err, current) => {
-				if (current.length === 0) {
-					await interaction.editReply(
-						'A book has not yet been chosen, reach out to Tyler for assistance!'
-					);
-					return;
-				}
+			const currentReadingQuery = currentlyReading.findOne({});
+			currentReadingQuery.select('completedReaders');
 
-				if (current[0].completedReaders.size === 0) {
-					await interaction.editReply('Nobody has completed the current book.');
-					return;
-				}
+			const current = await currentReadingQuery.exec();
 
-				current[0].completedReaders.forEach((reader) => {
-					readerArray.push(reader);
-				});
+			if (current === undefined) {
+				await interaction.editReply(
+					'A book has not yet been chosen, reach out to Tyler for assistance!'
+				);
+				return;
+			} else if (current.completedReaders.size === 0) {
+				await interaction.editReply('Nobody has completed the current book.');
+				return;
+			}
 
-				await interaction.editReply({
-					content:
-						'The following users have completed the current book: \n' +
-						readerArray.join('\n'),
-				});
+			current.completedReaders.forEach((reader) => {
+				readerArray.push(reader);
+			});
+
+			await interaction.editReply({
+				content:
+					'The following users have completed the current book: \n	- ' +
+					readerArray.join('\n	- '),
+			});
+		} else if (interaction.options.getSubcommand() === 'leaderboard') {
+			const libraryQuery = library
+				.find({})
+				.where('averageRating')
+				.ne(undefined)
+				.sort({ averageRating: -1 })
+				.limit(10);
+
+			const allRatings = await libraryQuery.exec();
+
+			let leaderBoardArray = [];
+
+			allRatings.forEach((rating) => {
+				leaderBoardArray.push(
+					rating._title + ': ' + rating.averageRating.toFixed(2) + '/5'
+				);
+			});
+
+			await interaction.editReply({
+				content:
+					'The Current Top 10 Rated Books Are: \n	- ' +
+					leaderBoardArray.join('\n	- '),
 			});
 		}
 	},

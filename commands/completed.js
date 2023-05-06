@@ -8,47 +8,45 @@ module.exports = {
 		.setName('complete')
 		.setDescription('Designates you have completed the current book.'),
 	async execute(interaction) {
-		await interaction.reply('Thinking...');
+		await interaction.deferReply();
 
-		discordUser.find({ _user: interaction.user.id }, async (err, foundUser) => {
-			if (foundUser.length === 0) {
-				await interaction.editReply({
-					content:
-						'User not found, please submit the following command: "/register newuser"',
-				});
-			} else {
-				let bookTitle = '';
+		//build and execute db query to find user
+		const userQuery = discordUser.findOne({ _user: interaction.user.id });
+		userQuery.select('name');
 
-				currentlyReading.find({}, async (err, current) => {
-					if (current.length === 0) {
-						await interaction.editReply(
-							'A book has not yet been chosen, reach out to Tyler for assistance!'
-						);
-						return;
-					}
+		const user = await userQuery.exec();
 
-					bookTitle = current[0]._title;
+		//build and execute db query to find current book
+		const currentReadingQuery = currentlyReading.find({});
+		currentReadingQuery.select('_title');
 
-					await discordUser.updateOne(
-						{ _user: interaction.user.id },
-						{ $push: { bookCompleted: current[0]._title } }
-					);
+		const currentBook = await currentReadingQuery.exec();
 
-					currentlyReading.findOneAndUpdate(
-						{ _title: bookTitle },
-						{
-							$push: { completedReaders: foundUser[0].name },
-						},
-						async (err, res) => {
-							if (err) console.log(err);
+		//end interaction if there is no book selected
+		if (currentBook.length === 0) {
+			await interaction.editReply(
+				'A book has not yet been chosen, reach out to Tyler for assistance!'
+			);
+			return;
+		}
 
-							await interaction.editReply(
-								'Your status has been set as completed! Thanks for reading!'
-							);
-						}
-					);
-				});
+		//build and update user
+		user.updateOne({ $push: { bookCompleted: currentBook[0]._title } });
+
+		await updateUserQuery.exec();
+
+		//build and update current readers
+		const updateCurrentReadingQuery = currentlyReading.findOneAndUpdate(
+			{ _title: currentBook[0]._title },
+			{
+				$push: { completedReaders: user.name },
 			}
-		});
+		);
+
+		updateCurrentReadingQuery.exec();
+
+		await interaction.editReply(
+			'Your status has been set as completed!\nPlease rate the book using /rate!'
+		);
 	},
 };
