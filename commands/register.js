@@ -97,14 +97,11 @@ module.exports = {
 					return;
 				}
 
-				await current.updateOne(
-					{ _title: current._title },
-					{
-						$set: {
-							[`registeredReaders.${user.name}`]: user,
-						},
-					}
-				);
+				await current.updateOne({
+					$set: {
+						[`registeredReaders.${user.name}`]: user,
+					},
+				});
 
 				await interaction.editReply('successfully Registered!');
 			}

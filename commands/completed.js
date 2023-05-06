@@ -17,13 +17,13 @@ module.exports = {
 		const user = await userQuery.exec();
 
 		//build and execute db query to find current book
-		const currentReadingQuery = currentlyReading.find({});
+		const currentReadingQuery = currentlyReading.findOne({});
 		currentReadingQuery.select('_title');
 
 		const currentBook = await currentReadingQuery.exec();
 
 		//end interaction if there is no book selected
-		if (currentBook.length === 0) {
+		if (currentBook === null) {
 			await interaction.editReply(
 				'A book has not yet been chosen, reach out to Tyler for assistance!'
 			);
@@ -31,19 +31,10 @@ module.exports = {
 		}
 
 		//build and update user
-		user.updateOne({ $push: { bookCompleted: currentBook[0]._title } });
-
-		await updateUserQuery.exec();
+		await user.updateOne({ $push: { bookCompleted: currentBook._title } });
 
 		//build and update current readers
-		const updateCurrentReadingQuery = currentlyReading.findOneAndUpdate(
-			{ _title: currentBook[0]._title },
-			{
-				$push: { completedReaders: user.name },
-			}
-		);
-
-		updateCurrentReadingQuery.exec();
+		await currentBook.updateOne({ $push: { completedReaders: user.name } });
 
 		await interaction.editReply(
 			'Your status has been set as completed!\nPlease rate the book using /rate!'
