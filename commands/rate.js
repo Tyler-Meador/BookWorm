@@ -33,7 +33,7 @@ module.exports = {
 
 			const book = await bookQuery.exec();
 
-			if (book === undefined) {
+			if (book === null) {
 				await interaction.editReply('Book does not exist. Please try again.');
 				return;
 			}
@@ -126,7 +126,7 @@ module.exports = {
 					i++;
 				}
 
-				newRating = newRating === 0 ? 1 : (newRating + i + 1) / 2;
+				newRating = newRating === 0 ? i + 1 : (newRating + i + 1) / 2;
 
 				await book.updateOne({ averageRating: newRating });
 

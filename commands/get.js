@@ -237,7 +237,7 @@ module.exports = {
 
 			allRatings.forEach((rating) => {
 				leaderBoardArray.push(
-					rating._title + ': ' + rating.averageRating.toFixed(2) + '/5'
+					rating._title + ': ' + rating.averageRating.toFixed(2) + ' / 5'
 				);
 			});
 
