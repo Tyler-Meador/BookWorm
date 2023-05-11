@@ -71,7 +71,7 @@ module.exports = {
 
 		const allUsers = await getAllNominated.exec();
 
-		const chosenIndex = allUsers.indexOf(user._user);
+		const chosenIndex = allUsers.indexOf(book.userSubmitted);
 
 		allUsers.splice(chosenIndex, 1);
 
